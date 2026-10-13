@@ -8,6 +8,21 @@ else
     mkdir /tmp/SecurityAudit
 fi
 
+check_for_errors() {
+    "$@"
+     returnC=$?
+
+    if [[ $returnC -eq 0 ]]
+    then
+        echo "Successfully ran [ $@ ]" >&2
+    else
+        echo "Error: Command [ $@ ] returned $returnC" >&2
+    fi
+
+    return $returnC
+    
+}
+
 argument=$1
 
 main() {
@@ -68,6 +83,8 @@ main() {
 
 
     # Create auditd reports 
+    sudo auditctl -l
+    sudo -au,
 
 }
 
