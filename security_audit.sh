@@ -1,8 +1,6 @@
 #!/bin/bash
 
-
-
-
+DIRECTORY="/tmp/SecurityAudit"
 
 check_for_errors() {
     
@@ -10,11 +8,12 @@ check_for_errors() {
     returnC=$?
 
     if [[ $returnC -eq 0 ]]; then
-        echo "Successfully ran [ $* ]"
+        echo "Successfully ran [ $* ]"  >&2
     else
         echo "Error: Command [ $* ] returned $returnC" >&2
     fi
 
+    return $returnC
 }
 
 world_writable_files() {
@@ -25,15 +24,15 @@ world_writable_files() {
 
 users_account_no_password() {
     # Check for users accounts that do not have a password
-    PASSWD=$(sudo getent shadow | awk -F: '{if ($2 == "*") print "Account " $1 " has no password"; else if ($2 == "!*") print "Account " $1 " is locked and has no password"; 
-    else if ($2 == "!") print "Account " $1 " is locked";}')
+    PASSWD=$( check_for_errors sudo getent shadow | awk -F: '{if ($2 == "*") print "Account " $1 " has no password"; else if ($2 == "!*") print "Account " $1 " is locked and has no password"; 
+    else if ($2 == "!") print "Account " $1 " is locked";  else if ($2 == " ") print "Account " $1 " has a null password";}')
 
-    echo "$PASSWD" | sudo tee "$DIRECTORY"/World_writable_files.txt > /dev/null
+    echo "$PASSWD" | sudo tee "$DIRECTORY"/user_account_wopasswd.txt > /dev/null
    }
 
 ssh_unsuccesfull_login() {
      # Check for unsuccesfull SSH login attempts
-    SSHLOGIN=$(journalctl -t sshd | grep -e "[Ee].{3}[Rr]" -e "[Ll].{3}[Nn]")
+    SSHLOGIN=$(check_for_errors journalctl -t sshd | grep -e "[Ee].{3}[Rr]" -e "[Ll].{3}[Nn]")
     echo "$SSHLOGIN" | sudo tee "$DIRECTORY"/UnsuccesfullSSHLogin.txt > /dev/null
 }
 
@@ -55,7 +54,7 @@ permission_on_critical_files() {
 
 ssh_config() {
     # Check ssh config
-    cat /etc/ssh/sshd_config
+    check_for_errors cat /etc/ssh/sshd_config
 }
 
 SUID_SGID_binaries() {
@@ -75,7 +74,7 @@ SUID_SGID_binaries() {
             [[ -g "$file" ]] && type+="SGID"
 
             printf '%-10s %s\n' "$type" "$(stat -c '%A %U:%G %n' "$file")"
-        done < <(find "$path" -type f \( -perm -4000 -o -perm -2000 \) -print0 2>/dev/null)
+        done < <(check_for_errors find "$path" -type f \( -perm -4000 -o -perm -2000 \) -print0)
     done
 
     echo "Total SUID/SGID files: ${#suid_sgid_files[@]}"
@@ -83,50 +82,50 @@ SUID_SGID_binaries() {
 
 auditd_report() {
     # Create auditd reports 
-    aureport -u --failed --summary -i
+    check_for_errors aureport -u --failed --summary -i
 }
 
 upgradbale_packages() {
      #Check for upgradbale packages
-    LIST_UPGRADABLE=$(apt list --upgradable)
+    LIST_UPGRADABLE=$(check_for_errors apt list --upgradable)
     echo "$LIST_UPGRADABLE" | sudo tee "$DIRECTORY"/upgradable_packages.txt > /dev/null
 }
 
 kernel_errors() {
     #Check for kernel error
-    dmesg -l err
+    check_for_errors dmesg -l err
 }
 
 
 current_cron_jobs() {
     #See current running cron jobs
-    for user in $(cut -f1 -d: /etc/passwd); do crontab -u $user -l; done
+    for user in $(check_for_errors cut -f1 -d: /etc/passwd); do crontab -u $user -l; done
 }
 
 network_interfaces() {
 
     #Network Interfaces
-    ip a
+    check_for_errors ip a
 }
 
 processes_by_root() {
      #Check processes run by root
-    ps -u root -F
+    check_for_errors ps -u root -F
 }
 
 password_policies() {
     #Passwrod policies (PAM)
-    cat /etc/pam.d/common-password
+    check_for_errors cat /etc/pam.d/common-password
 }
 
 open_sockets() {
     #Show open sockets
-    ss -lmi
+    check_for_errors ss -lmi
 }
 
 failed_services() {
     # Failed services
-    systemctl --state=failed
+    check_for_errors systemctl --state=failed
 }
 
 
@@ -143,15 +142,17 @@ cat << "EOF"
 EOF
 }
 
+check_folder() {
+    if [[ -d "$DIRECTORY" ]]; then
+        echo "Directory exists"
+    else
+        mkdir /tmp/SecurityAudit
+    fi
+}
+
 menu() {
 
-DIRECTORY="/tmp/SecurityAudit"
-
-if [[ -d "$DIRECTORY" ]]; then
-    echo "Directory exists"
-else
-    mkdir /tmp/SecurityAudit
-fi
+check_folder
 
 cat << "EOF"
     1) Check for world-writable files
@@ -194,12 +195,35 @@ EOF
     
 }
 
+run_as_all() {
+    check_folder
+    
+    world_writable_files
+    users_account_no_password
+    ssh_unsuccesfull_login
+    permission_on_critical_files
+    ssh_config
+    SUID_SGID_binaries
+    auditd_report
+    upgradbale_packages
+    kernel_errors
+    current_cron_jobs
+    network_interfaces
+    processes_by_root
+    password_policies
+    open_sockets
+    failed_services
+
+    return 0
+}
+
 
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 
 case "$1" in
     help|-h|--help)       cat "$SCRIPT_DIR/README" ;;
     version|-v|--version) echo "Version 1.0.0" ;;
+    all|-a|--all)         run_as_all ;;
     "")                   banner_print; menu ;;
     *)                    echo "Not known option: $1 (try: $0 help)" >&2; exit 1 ;;
 esac
