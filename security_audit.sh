@@ -1,88 +1,44 @@
 #!/bin/bash
 
-DIRECTORY="/tmp/SecurityAudit"
 
-if [[ -d "$DIRECTORY" ]]; then
-    echo "Direcotry exists"
-else
-    mkdir /tmp/SecurityAudit
-fi
+
+
 
 check_for_errors() {
+    
     "$@"
-     returnC=$?
+    returnC=$?
 
-    if [[ $returnC -eq 0 ]]
-    then
+    if [[ $returnC -eq 0 ]]; then
         echo "Successfully ran [ $* ]"
     else
         echo "Error: Command [ $* ] returned $returnC" >&2
     fi
 
-    return $returnC
-    
 }
 
-OPTION=0
-
-banner_print() {
-cat << "EOF"
-         #      #        # #######   # ###########
-        # #     #        # #      #  #      #
-       #   #    #        # #       # #      #
-      #######   #        # #       # #      #
-     #       #  #        # #      #  #      #
-    #         # ########## #######   #      #
-EOF
+world_writable_files() {
+     # Find all world-writable files on local filesystems
+    WORLD=$(check_for_errors sudo find / -xdev -type f -perm -0002)
+    echo "$WORLD" | sudo tee "$DIRECTORY"/World_writable_files.txt > /dev/null
 }
 
-menu() {
-cat << "EOF"
-    1) Check for world-writable files
-    2) Check for users that do not have passwords
-    3) Unsuccesfull SSH login attempts
-    4) Check for permission on critical files
-    5) Check ssh config
-    6) Check for SUID and SGID binaries
-    7) Placeholder
-    8) Placeholder
-    9) Placeholder
-    10) Placeholder
-    11) Placeholder
-    12) Placeholder
-    13) Placeholder
-    14) Placeholder
-    15) Placeholder
-    16) Placeholder
-    17) Placeholder
-    18) Placeholder
-    19) Placeholder
-    20) Placeholder
-EOF
-
-    read -rp "Enter your option: " OPTION
-    echo "You choose" $OPTION
-}
-
-banner_print
-menu
-
-
-#main() {
-
-    # Find all world-writable files on local filesystems
-    sudo find / -xdev -type f -perm -0002 2>/dev/null 1>"$DIRECTORY"/World_writable_files.txt
-
+users_account_no_password() {
     # Check for users accounts that do not have a password
-    sudo getent shadow | awk -F: '{if ($2 == "*") print "Account " $1 " has no password"; else if ($2 == "!*") print "Account " $1 " is locked and has no password"; 
-    else if ($2 == "!") print "Account " $1 " is locked";}' > "$DIRECTORY"/Accounts_status.txt
-   
-    # Check for unsuccesfull SSH login attempts
+    PASSWD=$(sudo getent shadow | awk -F: '{if ($2 == "*") print "Account " $1 " has no password"; else if ($2 == "!*") print "Account " $1 " is locked and has no password"; 
+    else if ($2 == "!") print "Account " $1 " is locked";}')
 
-    journalctl -t sshd | grep -e "[Ee].{3}[Rr]" -e "[Ll].{3}[Nn]" > "$DIRECTORY"/UnsuccesfullSSHLogin.txt
+    echo "$PASSWD" | sudo tee "$DIRECTORY"/World_writable_files.txt > /dev/null
+   }
 
+ssh_unsuccesfull_login() {
+     # Check for unsuccesfull SSH login attempts
+    SSHLOGIN=$(journalctl -t sshd | grep -e "[Ee].{3}[Rr]" -e "[Ll].{3}[Nn]")
+    echo "$SSHLOGIN" | sudo tee "$DIRECTORY"/UnsuccesfullSSHLogin.txt > /dev/null
+}
 
-    # Check for permission on critical files 
+permission_on_critical_files() {
+     # Check for permission on critical files 
 
     criticalFiles=("/etc/passwd" "/etc/shadow" "/etc/group" "/etc/gshadow" "/etc/sudoers" "/etc/skel" "/etc/login.defs")
     permissionOfCriticalFiles=()
@@ -95,11 +51,14 @@ menu
         echo "${criticalFiles[$count]}": "${permissionOfCriticalFiles[$count]}"
         ((count++));
     done
+}
 
+ssh_config() {
     # Check ssh config
+    cat /etc/ssh/sshd_config
+}
 
-    cat /etc/ssh/ssh_config
-
+SUID_SGID_binaries() {
     # Check for SUID and SGID binaries
 
     importantDirs=(/usr/local/sbin /usr/sbin /usr/local/bin /usr/bin /etc /usr/lib /usr/lib64 /usr/lib32 /boot)
@@ -120,50 +79,127 @@ menu
     done
 
     echo "Total SUID/SGID files: ${#suid_sgid_files[@]}"
+}
 
+auditd_report() {
     # Create auditd reports 
     aureport -u --failed --summary -i
+}
 
+upgradbale_packages() {
+     #Check for upgradbale packages
+    LIST_UPGRADABLE=$(apt list --upgradable)
+    echo "$LIST_UPGRADABLE" | sudo tee "$DIRECTORY"/upgradable_packages.txt > /dev/null
+}
 
-    #Check for upgradbale packages
-
-    apt list --upgradable >> "$DIRECTORY"/upgradable_packages.txt.
-
-
+kernel_errors() {
     #Check for kernel error
-
     dmesg -l err
+}
 
+
+current_cron_jobs() {
     #See current running cron jobs
     for user in $(cut -f1 -d: /etc/passwd); do crontab -u $user -l; done
+}
+
+network_interfaces() {
 
     #Network Interfaces
     ip a
+}
 
-    #Check processes run by root
+processes_by_root() {
+     #Check processes run by root
     ps -u root -F
+}
 
+password_policies() {
     #Passwrod policies (PAM)
     cat /etc/pam.d/common-password
+}
+
+open_sockets() {
+    #Show open sockets
+    ss -lmi
+}
+
+failed_services() {
+    # Failed services
+    systemctl --state=failed
+}
 
 
 
-#}
 
-3argument=$1
+banner_print() {
+cat << "EOF"
+         #      #        # #######   # ###########
+        # #     #        # #      #  #      #
+       #   #    #        # #       # #      #
+      #######   #        # #       # #      #
+     #       #  #        # #      #  #      #
+    #         # ########## #######   #      #
+EOF
+}
+
+menu() {
+
+DIRECTORY="/tmp/SecurityAudit"
+
+if [[ -d "$DIRECTORY" ]]; then
+    echo "Directory exists"
+else
+    mkdir /tmp/SecurityAudit
+fi
+
+cat << "EOF"
+    1) Check for world-writable files
+    2) Check for users that do not have passwords
+    3) Unsuccesfull SSH login attempts
+    4) Check for permission on critical files
+    5) Check ssh config
+    6) Check for SUID and SGID binaries
+    7) Create auditd reports (Failled ones)
+    8) Check for upgradbale packages
+    9) Check for kernel errors
+    10) See current running cron jobs
+    11) Current Network Interfaces
+    12) Check processes run by root
+    13) See Passwrod policies (PAM)
+    14) Show open sockets
+    15) Failed services
+EOF
+
+    read -rp "Enter your option: " OPTION
+
+    case $OPTION in
+        1)  world_writable_files ;;
+        2)  users_account_no_password ;;
+        3)  ssh_unsuccesfull_login ;;
+        4)  permission_on_critical_files ;;
+        5)  ssh_config ;;
+        6)  SUID_SGID_binaries ;;
+        7)  auditd_report ;;
+        8)  upgradbale_packages ;;
+        9)  kernel_errors ;;
+        10) current_cron_jobs ;;
+        11) network_interfaces ;;
+        12) processes_by_root ;;
+        13) password_policies ;;
+        14) open_sockets ;;
+        15) failed_services ;;
+    *)  echo "Invalid option: $OPTION" >&2 ;;
+    esac
+    
+}
 
 
-#while true ; do
-#    if [[ "$argument" == "help" ]]; then
-#        echo "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aenean convallis libero sit amet neque pulvinar semper. Nullam laoreet condimentum quam, non auctor lorem 
-#        scelerisque in. Duis elementum consequat diam, eget auctor sem rhoncus in. Aliquam vel pharetra dui. Sed volutpat ex ex, quis fermentum justo dignissim sit amet. Proin 
-#        vestibulum lacus id nunc luctus interdum. Etiam auctor egestas nulla id feugiat. Aenean facilisis tellus non lectus posuere, eget facilisis turpis tempor. Mauris odio quam, 
-#        venenatis et rutrum quis, fringilla vel eros. Proin a fermentum nibh. Suspendisse sagittis enim ut lectus volutpat, non suscipit tellus sagittis."
-#        break;
-#    elif [[ "$argument" == "version" ]]; then   
-#        echo "Version 1.0.0"
-#    else 
-#       main
-#        break;
-#    fi
-#done
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+
+case "$1" in
+    help|-h|--help)       cat "$SCRIPT_DIR/README" ;;
+    version|-v|--version) echo "Version 1.0.0" ;;
+    "")                   banner_print; menu ;;
+    *)                    echo "Not known option: $1 (try: $0 help)" >&2; exit 1 ;;
+esac

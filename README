@@ -1,2 +1,11 @@
-Work in Progress...
+Security Audit Tool
+
+This tool is a simple script which gives information to the relevant personeel and users
+who might run the script on  world writable files, users with no passwords, unsuccesful ssh logins
+permission check on critical files, look into the ssh config, check the binaries that have SUID and SGID, 
+make an aduit report on failed events, check upgradable packages, kernel errors, check
+current running cron jobs, network interfaces information, processes run by root, password policies,
+open sockets, and failed services; all of these that makes secuirty info on the system, thus the name security aduit tool.
+
+
 
