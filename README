@@ -7,5 +7,18 @@ make an aduit report on failed events, check upgradable packages, kernel errors,
 current running cron jobs, network interfaces information, processes run by root, password policies,
 open sockets, and failed services; all of these that makes secuirty info on the system, thus the name security aduit tool.
 
+Requirements
 
+Root privileges - Some checks require sudo/root for complete results
+For Debian based Linux distribution.
+
+Usage
+
+Open the terminal and enter the below command to change permissions on the script.
+
+chmod +x security_audit.sh
+
+Execute with sudo for full results:
+
+sudo ./security_audit.sh
 
