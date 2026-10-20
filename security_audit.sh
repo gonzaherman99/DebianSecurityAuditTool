@@ -1,6 +1,6 @@
 #!/bin/bash
 
-DIRECTORY="/tmp/SecurityAudit"
+DIRECTORY="/tmp/SecurityAudit/$(date +%a-%b-%d-%Y/%H:%M:%S%p)"
 
 check_for_errors() {
     
@@ -25,7 +25,7 @@ world_writable_files() {
 users_account_no_password() {
     # Check for users accounts that do not have a password
     PASSWD=$( check_for_errors sudo getent shadow | awk -F: '{if ($2 == "*") print "Account " $1 " has no password"; else if ($2 == "!*") print "Account " $1 " is locked and has no password"; 
-    else if ($2 == "!") print "Account " $1 " is locked";  else if ($2 == " ") print "Account " $1 " has a null password";}')
+    else if ($2 == "!") print "Account " $1 " is locked";  else if ($2 == "") print "Account " $1 " has a null password";}')
 
     echo "$PASSWD" | sudo tee "$DIRECTORY"/user_account_wopasswd.txt > /dev/null
    }
@@ -70,7 +70,7 @@ SUID_SGID_binaries() {
             suid_sgid_files+=("$file")
 
             type=""
-            [[ -u "$file" ]] && type+="SUID "
+            [[ -u "$file" ]] && type+="SUID"
             [[ -g "$file" ]] && type+="SGID"
 
             printf '%-10s %s\n' "$type" "$(stat -c '%A %U:%G %n' "$file")"
@@ -105,7 +105,7 @@ current_cron_jobs() {
 network_interfaces() {
 
     #Network Interfaces
-    check_for_errors ip a
+    check_for_errors ip -br a
 }
 
 processes_by_root() {
@@ -128,6 +128,16 @@ failed_services() {
     check_for_errors systemctl --state=failed
 }
 
+critical_files() {
+    check_for_errors find / -maxdepth 3 -name '*.rhosts' -o -name '*.netrc*' -o -name '*.forward*'
+}
+
+dirrectories_of_users() {
+    while IFS=: read -r f1 f2 f3 f4 f5 f6 f7
+    do 
+        echo "User $f1 use $f7 shell and stores files in $f6 directory."
+    done < /etc/passwd
+}
 
 
 
@@ -146,7 +156,7 @@ check_folder() {
     if [[ -d "$DIRECTORY" ]]; then
         echo "Directory exists"
     else
-        mkdir /tmp/SecurityAudit
+        mkdir "$DIRECTORY"
     fi
 }
 
@@ -167,9 +177,10 @@ cat << "EOF"
     10) See current running cron jobs
     11) Current Network Interfaces
     12) Check processes run by root
-    13) See Passwrod policies (PAM)
+    13) See Password policies (PAM)
     14) Show open sockets
     15) Failed services
+    16) Critical files
 EOF
 
     read -rp "Enter your option: " OPTION
@@ -190,6 +201,8 @@ EOF
         13) password_policies ;;
         14) open_sockets ;;
         15) failed_services ;;
+        16) critical_files ;;
+        17) dirrectories_of_users ;;
     *)  echo "Invalid option: $OPTION" >&2 ;;
     esac
     
@@ -213,6 +226,8 @@ run_as_all() {
     password_policies
     open_sockets
     failed_services
+    critical_files
+    dirrectories_of_users
 
     return 0
 }
