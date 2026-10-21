@@ -14,11 +14,18 @@ For Debian based Linux distribution.
 
 Usage
 
-Open the terminal and enter the below command to change permissions on the script.
+Open a terminal and make the script executable:
 
-chmod +x security_audit.sh
+    chmod +x security_audit.sh
 
 Execute with sudo for full results:
 
-sudo ./security_audit.sh
+    sudo ./security_audit.sh           Show the banner and interactive menu
+    sudo ./security_audit.sh --all     Run every check
+    ./security_audit.sh --help         Show this README
+    ./security_audit.sh --version      Show the version
 
+Short forms are also accepted: -a or all, -h or help, -v or version.
+
+Keep this README in the same directory as the script, because --help reads it
+from there.
